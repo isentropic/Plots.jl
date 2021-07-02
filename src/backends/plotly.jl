@@ -7,7 +7,7 @@ function _plotly_framestyle(style::Symbol)
         return style
     else
         default_style = get((semi = :box, origin = :zerolines), style, :axes)
-        @warn("Framestyle :$style is not supported by Plotly and PlotlyJS. :$default_style was cosen instead.")
+        @warn("Framestyle :$style is not supported by Plotly and PlotlyJS. :$default_style was chosen instead.")
         default_style
     end
 end
@@ -143,7 +143,8 @@ function plotly_axis(axis, sp, anchor = nothing, domain = nothing)
         :zerolinecolor => rgba_string(axis[:foreground_color_axis]),
         :showline   => framestyle in (:box, :axes) && axis[:showaxis],
         :linecolor  => rgba_string(plot_color(axis[:foreground_color_axis])),
-        :ticks      => axis[:tick_direction] == :out ? "outside" : "inside",
+        :ticks      => axis[:tick_direction] === :out ? "outside" : 
+                       axis[:tick_direction] === :in ? "inside" : "",
         :mirror     => framestyle == :box,
         :showticklabels => axis[:showaxis],
     )
@@ -662,7 +663,7 @@ function plotly_series(plt::Plot, series::Series)
 end
 
 function plotly_series_shapes(plt::Plot, series::Series, clims)
-    segments = collect(series_segments(series))
+    segments = series_segments(series)
     plotattributes_outs = Vector{KW}(undef, length(segments))
 
     # TODO: create a plotattributes_out for each polygon
@@ -681,7 +682,7 @@ function plotly_series_shapes(plt::Plot, series::Series, clims)
         for (letter, data) in zip((:x, :y), shape_data(series, 100))
     )
 
-    for segment in segments
+    for (k, segment) in enumerate(segments)
         i, rng = segment.attr_index, segment.range
         length(rng) < 2 && continue
 
@@ -701,10 +702,10 @@ function plotly_series_shapes(plt::Plot, series::Series, clims)
                 :dash => string(get_linestyle(series, i)),
             )
         end
-        plotattributes_out[:showlegend] = i==1 ? should_add_to_legend(series) : false
+        plotattributes_out[:showlegend] = k==1 ? should_add_to_legend(series) : false
         plotly_polar!(plotattributes_out, series)
         plotly_hover!(plotattributes_out, _cycle(series[:hover], i))
-        plotattributes_outs[i] = plotattributes_out
+        plotattributes_outs[k] = plotattributes_out
     end
     if series[:fill_z] !== nothing
         push!(plotattributes_outs, plotly_colorbar_hack(series, plotattributes_base, :fill))
@@ -952,8 +953,7 @@ function plotly_html_body(plt, style = nothing)
         <div id=\"$(uuid)\" style=\"$(style)\"></div>
         <script>
         $(requirejs_prefix)
-        PLOT = document.getElementById('$(uuid)');
-        Plotly.plot(PLOT, $(plotly_series_json(plt)), $(plotly_layout_json(plt)));
+        $(js_body(plt, uuid))
         $(requirejs_suffix)
         </script>
     """
@@ -962,7 +962,7 @@ end
 
 function js_body(plt::Plot, uuid)
     js = """
-        PLOT = document.getElementById('$(uuid)');
+        var PLOT = document.getElementById('$(uuid)');
         Plotly.plot(PLOT, $(plotly_series_json(plt)), $(plotly_layout_json(plt)));
     """
 end
@@ -986,7 +986,7 @@ end
 
 
 function _show(io::IO, ::MIME"text/html", plt::Plot{PlotlyBackend})
-    write(io, standalone_html(plt))
+    write(io, embeddable_html(plt))
 end
 
 

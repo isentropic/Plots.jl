@@ -7,7 +7,7 @@ mutable struct PlotExample
     exprs::Vector{Expr}
 end
 
-# the _examples we'll run for each
+# the _examples we'll run for each backend
 const _examples = PlotExample[
     PlotExample( # 1
         "Lines",
@@ -241,14 +241,15 @@ const _examples = PlotExample[
                         m -> m in Plots.supported_markers(),
                         Plots._shape_keys,
                     )
-                    markers = reshape(markers, 1, length(markers))
+                    markers = permutedims(markers)
                     n = length(markers)
                     x = range(0, stop = 10, length = n + 2)[2:(end - 1)]
                     y = repeat(reshape(reverse(x), 1, :), n, 1)
                     scatter(
                         x,
                         y,
-                        m = (8, :auto),
+                        m = markers,
+                        markersize = 8,
                         lab = map(string, markers),
                         bg = :linen,
                         xlim = (0, 10),
@@ -1162,6 +1163,57 @@ const _examples = PlotExample[
             ),
         ],
     ),
+    PlotExample( # 55
+        "3D axis flip / mirror",
+        "",
+        [
+            :(
+              begin
+		using LinearAlgebra
+		scalefontsizes()
+                scalefontsizes(.5)
+
+                x, y = -6:0.5:10, -8:0.5:8
+		function f(x,y)
+		  r = norm([x,y])
+		  sinc(r / pi)
+		end
+
+                args = (x, y, f)
+                kwargs = Dict(
+                    :xlabel => "x", :ylabel => "y", :zlabel => "z",
+                    :grid => true, :minorgrid => true, :dpi => 200
+                )
+
+                plots = [wireframe(args..., title = "wire"; kwargs...)]
+
+                for ax ∈ (:x, :y, :z)
+                    push!(plots, wireframe(
+                        args...,
+                        title = "wire-flip-$ax",
+                        xflip = ax == :x,
+                        yflip = ax == :y,
+                        zflip = ax == :z;
+                        kwargs...,
+                    ))
+                end
+
+                for ax ∈ (:x, :y, :z)
+                    push!(plots, wireframe(
+                        args...,
+                        title = "wire-mirror-$ax",
+                        xmirror = ax == :x,
+                        ymirror = ax == :y,
+                        zmirror = ax == :z;
+                        kwargs...,
+                    ))
+                end
+
+                plot(plots..., layout=(@layout [_ ° _; ° ° °; ° ° °]), margin=2Plots.mm)
+              end
+            ),
+        ],
+    ),
 ]
 
 # Some constants for PlotDocs and PlotReferenceImages
@@ -1170,7 +1222,7 @@ _backend_skips = Dict(
     :gr => [25, 30, 47],
     :pyplot => [2, 25, 30, 31, 47, 49],
     :plotlyjs => [2, 21, 24, 25, 30, 31, 49, 51],
-    :plotly => [2, 21, 24, 25, 30, 31, 49, 51],
+    :plotly => [2, 21, 24, 25, 30, 31, 49, 50, 51],
     :pgfplotsx => [
         2, # animation
         6, # images

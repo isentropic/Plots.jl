@@ -313,7 +313,7 @@ function _prepare_subplot(plt::Plot{T}, plotattributes::AKW) where {T}
     st = _override_seriestype_check(plotattributes, st)
 
     # change to a 3d projection for this subplot?
-    if RecipesPipeline.needs_3d_axes(st)
+    if RecipesPipeline.needs_3d_axes(st) || (st == :quiver && plotattributes[:z] !== nothing)
         sp.attr[:projection] = "3d"
     end
 
@@ -329,13 +329,21 @@ function _override_seriestype_check(plotattributes::AKW, st::Symbol)
     # do we want to override the series type?
     if !RecipesPipeline.is3d(st) && !(st in (:contour, :contour3d, :quiver))
         z = plotattributes[:z]
-        if !isa(z, Nothing) &&
+        if z !== nothing &&
            (size(plotattributes[:x]) == size(plotattributes[:y]) == size(z))
             st = (st == :scatter ? :scatter3d : :path3d)
             plotattributes[:seriestype] = st
         end
     end
     st
+end
+
+function needs_any_3d_axes(sp::Subplot)
+    any(
+        RecipesPipeline.needs_3d_axes(
+            _override_seriestype_check(s.plotattributes, s.plotattributes[:seriestype])
+        ) for s in series_list(sp)
+    )
 end
 
 function _expand_subplot_extrema(sp::Subplot, plotattributes::AKW, st::Symbol)

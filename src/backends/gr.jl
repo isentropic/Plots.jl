@@ -401,7 +401,7 @@ end
 
 function gr_nans_to_infs!(z)
     for (i,zi) in enumerate(z)
-        if zi == NaN
+        if isnan(zi)
             z[i] = Inf
         end
     end
@@ -651,12 +651,17 @@ end
 
 function gr_set_tickfont(sp, letter)
     axis = sp[Symbol(letter, :axis)]
+
+    # invalidate alignment changes for small rotations (|θ| < 45°)
+    trigger(rot) = abs(sind(rot)) < abs(cosd(rot)) ? 0 : sign(rot)
+
+    rot = axis[:rotation]
     if letter === :x || (RecipesPipeline.is3d(sp) && letter === :y)
-        halign = (:left, :hcenter, :right)[sign(axis[:rotation]) + 2]
-        valign = (axis[:mirror] ? :bottom : :top)
+        halign = (:left, :hcenter, :right)[trigger(rot) + 2]
+        valign = (axis[:mirror] ? :bottom : :top, :vcenter)[trigger(abs(rot)) + 1]
     else
-        halign = (axis[:mirror] ? :left : :right)
-        valign = (:top, :vcenter, :bottom)[sign(axis[:rotation]) + 2]
+        halign = (axis[:mirror] ? :left : :right, :hcenter)[trigger(abs(rot)) + 1]
+        valign = (:top, :vcenter, :bottom)[trigger(rot) + 2]
     end
     gr_set_font(
         tickfont(axis),
@@ -1282,12 +1287,22 @@ function gr_set_window(sp, viewport_plotarea)
         gr_set_viewport_polar(viewport_plotarea)
     else
         xmin, xmax, ymin, ymax = gr_xy_axislims(sp)
+        needs_3d = needs_any_3d_axes(sp)
+        if needs_3d
+            zmin, zmax = gr_z_axislims(sp)
+            zok = zmax > zmin
+        else
+            zok = true
+        end
+
         scaleop = 0
-        if xmax > xmin && ymax > ymin
-            sp[:xaxis][:scale] == :log10 && (scaleop |= GR.OPTION_X_LOG)
-            sp[:yaxis][:scale] == :log10 && (scaleop |= GR.OPTION_Y_LOG)
-            sp[:xaxis][:flip]            && (scaleop |= GR.OPTION_FLIP_X)
-            sp[:yaxis][:flip]            && (scaleop |= GR.OPTION_FLIP_Y)
+        if xmax > xmin && ymax > ymin && zok
+            sp[:xaxis][:scale] == :log10             && (scaleop |= GR.OPTION_X_LOG)
+            sp[:yaxis][:scale] == :log10             && (scaleop |= GR.OPTION_Y_LOG)
+            needs_3d && sp[:zaxis][:scale] == :log10 && (scaleop |= GR.OPTION_Z_LOG)
+            sp[:xaxis][:flip]                        && (scaleop |= GR.OPTION_FLIP_X)
+            sp[:yaxis][:flip]                        && (scaleop |= GR.OPTION_FLIP_Y)
+            needs_3d && sp[:zaxis][:flip]            && (scaleop |= GR.OPTION_FLIP_Z)
             # NOTE: setwindow sets the "data coordinate" limits of the current "viewport"
             GR.setwindow(xmin, xmax, ymin, ymax)
             GR.setscale(scaleop)
@@ -1310,7 +1325,7 @@ function gr_draw_axes(sp, viewport_plotarea)
     if RecipesPipeline.is3d(sp)
         # set space
         xmin, xmax, ymin, ymax = gr_xy_axislims(sp)
-        zmin, zmax = axis_limits(sp, :z)
+        zmin, zmax = gr_z_axislims(sp)
         GR.setspace(zmin, zmax, round.(Int, sp[:camera])...)
 
         # fill the plot area
@@ -1322,7 +1337,7 @@ function gr_draw_axes(sp, viewport_plotarea)
         GR.fillarea(x_bg, y_bg)
 
         for letter in (:x, :y, :z)
-            gr_draw_axis_3d(sp, letter)
+            gr_draw_axis_3d(sp, letter, viewport_plotarea)
         end
     elseif ispolar(sp)
         r = gr_set_viewport_polar(viewport_plotarea)
@@ -1352,7 +1367,7 @@ function gr_draw_axis(sp, letter, viewport_plotarea)
     gr_label_axis(sp, letter, viewport_plotarea)
 end
 
-function gr_draw_axis_3d(sp, letter)
+function gr_draw_axis_3d(sp, letter, viewport_plotarea)
     ax = axis_drawing_info_3d(sp, letter)
     axis = sp[Symbol(letter, :axis)]
 
@@ -1364,8 +1379,10 @@ function gr_draw_axis_3d(sp, letter)
     gr_draw_ticks(sp, axis, ax.tick_segments, gr_polyline3d)
 
     # labels
+    GR.setscale(0)
     gr_label_ticks_3d(sp, letter, ax.ticks)
     gr_label_axis_3d(sp, letter)
+    gr_set_window(sp, viewport_plotarea)
 end
 
 function gr_draw_grid(sp, axis, segments, func = gr_polyline)
@@ -1440,13 +1457,14 @@ function gr_label_ticks(sp, letter, ticks)
     oamin, oamax = axis_limits(sp, oletter)
     gr_set_tickfont(sp, letter)
     out_factor = ifelse(axis[:tick_direction] === :out, 1.5, 1)
-    x_offset = isy ? (axis[:mirror] ? 1 : -1) * 1.5e-2 * out_factor : 0
-    y_offset = isy ? 0 : (axis[:mirror] ? 1 : -1) * 8e-3 * out_factor
+    x_offset = isy ? -1.5e-2 * out_factor : 0
+    y_offset = isy ? 0 : -8e-3 * out_factor
 
     ov = sp[:framestyle] == :origin ? 0 : xor(oaxis[:flip], axis[:mirror]) ? oamax : oamin
+    sgn = axis[:mirror] ? -1 : 1
     for (cv, dv) in zip(ticks...)
         x, y = GR.wctondc(reverse_if((cv, ov), isy)...)
-        gr_text(x + x_offset, y + y_offset, dv)
+        gr_text(x + sgn * x_offset, y + sgn * y_offset, dv)
     end
 end
 
@@ -1478,8 +1496,8 @@ function gr_label_ticks_3d(sp, letter, ticks)
     xax, yax, zax = getindex.(Ref(sp), asyms)
 
     gr_set_tickfont(sp, letter)
-    nt = sp[:framestyle] == :origin ? 0 : xor(ax[:mirror], nax[:flip]) ? n1 : n0
-    ft = sp[:framestyle] == :origin ? 0 : xor(ax[:mirror], fax[:flip]) ? famax : famin
+    nt = sp[:framestyle] == :origin ? 0 : ax[:mirror] ? n1 : n0
+    ft = sp[:framestyle] == :origin ? 0 : ax[:mirror] ? famax : famin
 
     xoffset = if letter === :x
         (sp[:yaxis][:mirror] ? 1 : -1) * 1e-2 * (sp[:xaxis][:tick_direction] == :out ? 1.5 : 1)
@@ -1496,7 +1514,10 @@ function gr_label_ticks_3d(sp, letter, ticks)
         0
     end
 
-    for (cv, dv) in zip(ticks...)
+    cvs, dvs = ticks
+    ax[:flip] && reverse!(cvs)
+
+    for (cv, dv) in zip((cvs, dvs)...)
         xi, yi = gr_w3tondc(sort_3d_axes(cv, nt, ft, letter)...)
         gr_text(xi + xoffset, yi + yoffset, dv)
     end
@@ -1510,8 +1531,10 @@ function gr_label_axis(sp, letter, viewport_plotarea)
         GR.savestate()
         gr_set_font(guidefont(axis), sp)
         guide_position = axis[:guide_position]
+        angle = float(axis[:guidefontrotation])  # github.com/JuliaPlots/Plots.jl/issues/3089
         if letter === :y
-            GR.setcharup(-1, 0)
+            angle += 180.  # default angle = 0. should yield GR.setcharup(-1, 0) i.e. 180°
+            GR.setcharup(cosd(angle), sind(angle))
             ypos = gr_view_yposition(viewport_plotarea, position(axis[:guidefontvalign]))
             yalign = alignment(axis[:guidefontvalign])
             if guide_position === :right || (guide_position == :auto && mirror)
@@ -1522,6 +1545,8 @@ function gr_label_axis(sp, letter, viewport_plotarea)
                 xpos = viewport_plotarea[1] - 0.03 - !mirror * gr_axis_width(sp, axis)
             end
         else
+            angle += 90.  # default angle = 0. should yield GR.setcharup(0, 1) i.e. 90°
+            GR.setcharup(cosd(angle), sind(angle))
             xpos = gr_view_xposition(viewport_plotarea, position(axis[:guidefonthalign]))
             xalign = alignment(axis[:guidefonthalign])
             if guide_position === :top || (guide_position == :auto && mirror)
@@ -1561,8 +1586,8 @@ function gr_label_axis_3d(sp, letter)
             # color = ax[:guidefontcolor],
         )
         ag = (amin + amax) / 2
-        ng = xor(ax[:mirror], nax[:flip]) ? n1 : n0
-        fg = xor(ax[:mirror], fax[:flip]) ? famax : famin
+        ng = ax[:mirror] ? n1 : n0
+        fg = ax[:mirror] ? famax : famin
         x, y = gr_w3tondc(sort_3d_axes(ag, ng, fg, letter)...)
         if letter in (:x, :y)
             h = gr_axis_height(sp, ax)
@@ -1573,7 +1598,8 @@ function gr_label_axis_3d(sp, letter)
             y_offset = 0
         end
         letter === :z && GR.setcharup(-1, 0)
-        gr_text(x + x_offset, y + y_offset, ax[:guide])
+        sgn = ax[:mirror] ? -1 : 1
+        gr_text(x + sgn * x_offset, y + sgn * y_offset, ax[:guide])
         GR.restorestate()
     end
 end

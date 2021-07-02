@@ -1030,7 +1030,7 @@ function _before_layout_calcs(plt::Plot{PyPlotBackend})
             cbar_axis."set_tick_params"(
                 direction = axis[:tick_direction] == :out ? "out" : "in",
                 width=py_thickness_scale(plt, intensity),
-                length= 5 * py_thickness_scale(plt, intensity)
+                length = axis[:tick_direction] == :none ? 0 : 5 * py_thickness_scale(plt, intensity)
             )
 
 
@@ -1071,8 +1071,14 @@ function _before_layout_calcs(plt::Plot{PyPlotBackend})
                     ax.spines["left"]."set_position"("zero")
                 end
             elseif sp[:framestyle] in (:grid, :none, :zerolines)
-                for (loc, spine) in ax.spines
-                    spine."set_visible"(false)
+                if PyPlot.version >= v"3.4.1" # that is one where it worked, the API change may have some other value
+                    for spine in ax.spines
+                        ax.spines[string(spine)]."set_visible"(false)
+                    end
+                else
+                    for (loc, spine) in ax.spines
+                        spine."set_visible"(false)
+                    end
                 end
                 if sp[:framestyle] == :zerolines
                     ax."axhline"(y = 0, color = py_color(sp[:xaxis][:foreground_color_axis]), lw = py_thickness_scale(plt, 0.75))
@@ -1145,7 +1151,7 @@ function _before_layout_calcs(plt::Plot{PyPlotBackend})
             pyaxis."set_tick_params"(
                 direction = axis[:tick_direction] == :out ? "out" : "in",
                 width=py_thickness_scale(plt, intensity),
-                length= 5 * py_thickness_scale(plt, intensity)
+                length = axis[:tick_direction] == :none ? 0 : 5 * py_thickness_scale(plt, intensity)
                                      )
 
             getproperty(ax, Symbol("set_", letter, "label"))(axis[:guide])
@@ -1184,7 +1190,8 @@ function _before_layout_calcs(plt::Plot{PyPlotBackend})
                 pyaxis."set_tick_params"(
                     which = "minor",
                     direction = axis[:tick_direction] == :out ? "out" : "in",
-                    width=py_thickness_scale(plt, intensity))
+                    length = axis[:tick_direction] == :none ? 0 : py_thickness_scale(plt, intensity),
+                )
             end
 
             if axis[:minorgrid]
@@ -1194,7 +1201,8 @@ function _before_layout_calcs(plt::Plot{PyPlotBackend})
                 pyaxis."set_tick_params"(
                     which = "minor",
                     direction = axis[:tick_direction] == :out ? "out" : "in",
-                    width=py_thickness_scale(plt, intensity))
+                    length = axis[:tick_direction] == :none ? 0 : py_thickness_scale(plt, intensity)
+                )
 
                 pyaxis."grid"(true,
                     which = "minor",

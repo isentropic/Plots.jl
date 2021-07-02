@@ -9,9 +9,9 @@ compute_angle(v::P2) = (angle = atan(v[2], v[1]); angle < 0 ? 2π - angle : angl
 
 # -------------------------------------------------------------
 
-struct Shape
-    x::Vector{Float64}
-    y::Vector{Float64}
+struct Shape{X<:Number, Y<:Number}
+    x::Vector{X}
+    y::Vector{Y}
     # function Shape(x::AVec, y::AVec)
     #     # if x[1] != x[end] || y[1] != y[end]
     #     #     new(vcat(x, x[1]), vcat(y, y[1]))
@@ -43,7 +43,7 @@ function coords(shape::Shape)
 end
 
 #coords(shapes::AVec{Shape}) = unzip(map(coords, shapes))
-function coords(shapes::AVec{Shape})
+function coords(shapes::AVec{<:Shape})
     c = map(coords, shapes)
     x = [q[1] for q in c]
     y = [q[2] for q in c]
@@ -52,7 +52,7 @@ end
 
 "get an array of tuples of points on a circle with radius `r`"
 function partialcircle(start_θ, end_θ, n = 20, r=1)
-    Tuple{Float64,Float64}[(r*cos(u),r*sin(u)) for u in range(start_θ, stop=end_θ, length=n)]
+    [(r*cos(u), r*sin(u)) for u in range(start_θ, stop=end_θ, length=n)]
 end
 
 "interleave 2 vectors into each other (like a zipper's teeth)"
@@ -205,9 +205,12 @@ function rotate!(shape::Shape, Θ::Real, c = center(shape))
 end
 
 "rotate an object in space"
-function rotate(shape::Shape, Θ::Real, c = center(shape))
-    shapecopy = deepcopy(shape)
-    rotate!(shapecopy, Θ, c)
+function rotate(shape::Shape, θ::Real, c = center(shape))
+    x, y = coords(shape)
+    cx, cy = c
+    x_new = rotate_x.(x, y, θ, cx, cy)
+    y_new = rotate_y.(x, y, θ, cx, cy)
+    Shape(x_new, y_new)
 end
 
 # -----------------------------------------------------------------------
@@ -285,7 +288,7 @@ function font(args...;kw...)
 
   for symbol in keys(kw)
     if symbol == :family
-      family = kw[:family]
+      family = string(kw[:family])
     elseif symbol == :pointsize
       pointsize = kw[:pointsize]
     elseif symbol == :halign
@@ -471,6 +474,11 @@ mutable struct SeriesAnnotations
     baseshape::Union{Shape, AbstractVector{Shape}, Nothing}
     scalefactor::Tuple
 end
+
+series_annotations(scalar) = series_annotations([scalar])
+function series_annotations(anns::AMat)
+  map(series_annotations, anns)
+end
 function series_annotations(strs::AbstractVector, args...)
     fnt = font()
     shp = nothing
@@ -567,16 +575,27 @@ end
 
 annotations(::Nothing) = []
 annotations(anns::AVec) = anns
+annotations(anns::AMat) = map(annotations, anns)
 annotations(anns) = Any[anns]
 annotations(sa::SeriesAnnotations) = sa
 
 # Expand arrays of coordinates, positions and labels into induvidual annotations
 # and make sure labels are of type PlotText
-function process_annotation(sp::Subplot, xs, ys, labs, font = font())
+function process_annotation(sp::Subplot, xs, ys, labs, font = nothing)
     anns = []
     labs = makevec(labs)
     xlength = length(methods(length, (typeof(xs),))) == 0 ? 1 : length(xs)
     ylength = length(methods(length, (typeof(ys),))) == 0 ? 1 : length(ys)
+    if isnothing(font)
+        font = Plots.font(;
+                    family=sp[:annotationfontfamily],
+                    pointsize=sp[:annotationfontsize],
+                    halign=sp[:annotationhalign],
+                    valign=sp[:annotationvalign],
+                    rotation=sp[:annotationrotation],
+                    color=sp[:annotationcolor],
+                         )
+    end
     for i in 1:max(xlength, ylength, length(labs))
       x, y, lab = _cycle(xs, i), _cycle(ys, i), _cycle(labs, i)
         x = typeof(x) <: TimeType ? Dates.value(x) : x
@@ -585,14 +604,24 @@ function process_annotation(sp::Subplot, xs, ys, labs, font = font())
             alphabet = "abcdefghijklmnopqrstuvwxyz"
             push!(anns, (x, y, text(string("(", alphabet[sp[:subplot_index]], ")"), font)))
         else
-            push!(anns, (x, y, isa(lab, PlotText) ? lab : isa(lab, Tuple) ? text(lab...) : text(lab, font)))
+            push!(anns, (x, y, isa(lab, PlotText) ? lab : isa(lab, Tuple) ? text(lab[1], font, lab[2:end]...) : text(lab, font)))
         end
     end
     anns
 end
-function process_annotation(sp::Subplot, positions::Union{AVec{Symbol},Symbol}, labs, font = font())
+function process_annotation(sp::Subplot, positions::Union{AVec{Symbol},Symbol}, labs, font = nothing)
     anns = []
     positions, labs = makevec(positions), makevec(labs)
+    if isnothing(font)
+        font = Plots.font(;
+                          family=sp[:annotationfontfamily],
+                          pointsize=sp[:annotationfontsize],
+                          halign=sp[:annotationhalign],
+                          valign=sp[:annotationvalign],
+                          rotation=sp[:annotationrotation],
+                          color=sp[:annotationcolor],
+                         )
+    end
     for i in 1:max(length(positions), length(labs))
         pos, lab = _cycle(positions, i), _cycle(labs, i)
         pos = get(_positionAliases, pos, pos)
@@ -600,7 +629,7 @@ function process_annotation(sp::Subplot, positions::Union{AVec{Symbol},Symbol}, 
             alphabet = "abcdefghijklmnopqrstuvwxyz"
             push!(anns, (pos, text(string("(", alphabet[sp[:subplot_index]], ")"), font)))
         else
-            push!(anns, (pos, isa(lab, PlotText) ? lab : isa(lab, Tuple) ? text(lab...) : text(lab, font)))
+            push!(anns, (pos, isa(lab, PlotText) ? lab : isa(lab, Tuple) ? text(lab[1], font, lab[2:end]...) : text(lab, font)))
         end
     end
     anns

@@ -23,7 +23,38 @@ current(plot::AbstractPlot) = (CURRENT_PLOT.nullableplot = plot)
 
 Base.string(plt::Plot) = "Plot{$(plt.backend) n=$(plt.n)}"
 Base.print(io::IO, plt::Plot) = print(io, string(plt))
-Base.show(io::IO, plt::Plot) = print(io, string(plt))
+function Base.show(io::IO, plt::Plot)
+    print(io, string(plt))
+    sp_ekwargs = getindex.(plt.subplots, :extra_kwargs)
+    s_ekwargs = getindex.(plt.series_list, :extra_kwargs)
+    if isempty(plt[:extra_plot_kwargs]) && all(isempty, sp_ekwargs) && all(isempty, s_ekwargs)
+        return
+    end
+    print(io,"\nCaptured extra kwargs:\n")
+    do_show = true
+    for (key, value) in plt[:extra_plot_kwargs]
+        do_show && println(io, "  Plot:")
+        println(io, " "^4, key, ": ", value)
+        do_show = false
+    end
+    do_show = true
+    for (i, ekwargs) in enumerate(sp_ekwargs)
+        for (key, value) in ekwargs
+            do_show && println(io, "  SubplotPlot{$i}:")
+            println(io, " "^4, key, ": ", value)
+            do_show = false
+        end
+        do_show = true
+    end
+    for (i, ekwargs) in enumerate(s_ekwargs)
+        for (key, value) in ekwargs
+            do_show && println(io, "  Series{$i}:")
+            println(io, " "^4, key, ": ", value)
+            do_show = false
+        end
+        do_show = true
+    end
+end
 
 getplot(plt::Plot) = plt
 getattr(plt::Plot, idx::Int = 1) = plt.attr
@@ -60,7 +91,8 @@ end
 
 # build a new plot from existing plots
 # note: we split into plt1 and plts_tail so we can dispatch correctly
-function plot(plt1::Plot, plts_tail::Plot...; kw...)
+plot(plt1::Plot, plts_tail::Plot...; kw...) = plot!(deepcopy(plt1), deepcopy.(plts_tail)...; kw...)
+function plot!(plt1::Plot, plts_tail::Plot...; kw...)
     @nospecialize
     plotattributes = KW(kw)
     RecipesPipeline.preprocess_attributes!(plotattributes)

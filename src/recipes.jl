@@ -166,14 +166,42 @@ end
     y := y
     seriestype := :scatter
     @series begin
+        ()
+    end
+    @series begin
         seriestype := :path
         label := ""
         primary := false
         ()
     end
+    primary := false
     ()
 end
 @deps scatterpath path scatter
+
+
+# ---------------------------------------------------------------------------
+# regression line and scatter
+
+# plots line corresponding to linear regression of y on a constant and x
+@recipe function f(::Type{Val{:linearfit}}, x, y, z)
+    x := x
+    y := y
+    seriestype := :scatter
+    @series begin
+        ()
+    end
+    @series begin
+        y := mean(y) .+ cov(x, y) / var(x) .* (x .- mean(x))
+        seriestype := :path
+        label := ""
+        primary := false
+        ()
+    end
+    primary := false
+    ()
+end
+
 
 @specialize
 
@@ -1400,9 +1428,9 @@ end
     coords(shape)
 end
 
-@recipe function f(shapes::AVec{Shape})
+@recipe function f(shapes::AVec{<:Shape})
     seriestype --> :shape
-    # For backwards compatibility, column vectors of segmenting attributes are 
+    # For backwards compatibility, column vectors of segmenting attributes are
     # interpreted as having one element per shape
     for attr in union(_segmenting_array_attributes, _segmenting_vector_attributes)
         v = get(plotattributes, attr, nothing)
@@ -1415,7 +1443,7 @@ end
     coords(shapes)
 end
 
-@recipe function f(shapes::AMat{Shape})
+@recipe function f(shapes::AMat{<:Shape})
     seriestype --> :shape
     for j in axes(shapes, 2)
         @series coords(vec(shapes[:, j]))

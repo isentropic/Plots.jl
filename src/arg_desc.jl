@@ -116,6 +116,12 @@ const _arg_desc = KW(
 :legendfont                  => "Font. Font of legend items.",
 :legendtitlefont             => "Font. Font of the legend title.",
 :annotations                 => "(x,y,text) tuple(s).  Can be a single tuple or a list of them.  Text can be String or PlotText (created with `text(args...)`)  Add one-off text annotations at the x,y coordinates.",
+:annotationfontfamily        => "String or Symbol. Font family of annotations.",
+:annotationfontsize          => "Integer. Font pointsize of annotations.",
+:annotationhalign            => "Symbol. horizontal alignment of annotations, :hcenter, :left, :right or :center.",
+:annotationvalign            => "Symbol. Vertical alignment of annotations, :vcenter, :top, :bottom or :center.",
+:annotationrotation          => "Float. Rotation of annotations in degrees.",
+:annotationcolor             => "Colorant or :match. Color of annotations.",
 :projection                  => "Symbol or String.  '3d' or 'polar'",
 :aspect_ratio                => "Symbol (:equal or :none) or Number. Plot area is resized so that 1 y-unit is the same size as `aspect_ratio` x-units. With `:none`, images inherit aspect ratio of the plot area.",
 :margin                      => "Measure (multiply by `mm`, `px`, etc). Base for individual margins... not directly used.  Specifies the extra padding around subplots.",
@@ -131,7 +137,12 @@ const _arg_desc = KW(
 # axis args
 :guide                       => "String. Axis guide (label).",
 :guide_position              => "Symbol. Position of axis guides: :top, :bottom, :left or :right",
-:lims                        => "NTuple{2,Number} or Symbol. Force axis limits.  Only finite values are used (you can set only the right limit with `xlims = (-Inf, 2)` for example). `:round` widens the limit to the nearest round number ie. [0.1,3.6]=>[0.0,4.0]",
+:lims                        => """
+                                NTuple{2,Number} or Symbol. Force axis limits. Only finite values are used (you can set only the right limit with `xlims = (-Inf, 2)` for example).
+                                `:round` widens the limit to the nearest round number ie. [0.1,3.6]=>[0.0,4.0]
+                                `:symmetric` sets the limits to be symmetric around zero.
+                                Set widen=true to widen the specified limits (as occurs when lims are not specified).
+                                """,
 :ticks                       => "Vector of numbers (set the tick values), Tuple of (tickvalues, ticklabels), or `:auto`",
 :scale                       => "Symbol. Scale of the axis: `:none`, `:ln`, `:log2`, `:log10`",
 :rotation                    => "Number. Degrees rotation of tick labels.",
@@ -165,8 +176,11 @@ const _arg_desc = KW(
 :minorgridalpha              => "Number in [0,1]. The alpha/opacity override for the minorgrid lines.",
 :minorgridstyle              => "Symbol. Style of the minor grid lines. Choose from $(_allStyles)",
 :minorgridlinewidth          => "Number. Width of the minor grid lines (in pixels)",
-:tick_direction              => "Symbol.  Direction of the ticks. `:in` or `:out`",
+:tick_direction              => "Symbol.  Direction of the ticks. `:in`, `:out` or `:none`",
 :showaxis                    => "Bool, Symbol or String.  Show the axis. `true`, `false`, `:show`, `:hide`, `:yes`, `:no`, `:x`, `:y`, `:z`, `:xy`, ..., `:all`, `:off`",
-:widen                       => "Bool. Widen the axis limits by a small factor to avoid cut-off markers and lines at the borders. Defaults to `true`.",
+:widen                       => """
+                                Bool or :auto. Widen the axis limits by a small factor to avoid cut-off markers and lines at the borders.
+                                Defaults to `:auto`, which widens unless limits were manually set.
+                                """,
 :draw_arrow                  => "Bool. Draw arrow at the end of the axis.",
 )
